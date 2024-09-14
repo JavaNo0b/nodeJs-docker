@@ -17,9 +17,9 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      # github repository에서 checkout
+      # github repository에서 checkout / 현재 상태의 소스코드를 가상의 컨테이너 안으로 checkout
       - uses: actions/checkout@v2
-      # docker build 수행
+      # docker build 수행 / 가상의 컨테이너 안에 docker가 돌아갈 수 있는 환경을 설치
       - name: Set up docker buildx
         id: buildx
         uses: docker/setup-buildx-action@v1
@@ -30,13 +30,14 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ env.VERSION }}
           restore-keys: |
             ${{ runner.os }}-buildx-
-      # GitHub 컨테이너 레지스트리에 로그인 후 빌드 & 푸시
+      # GitHub 컨테이너 레지스트리에 생성한 토큰을 이용해 GHCR에 로그인
       - name: Login to ghcr
         uses: docker/login-action@v1
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN }}
+      # 해당 GHCR로 Docker image를 만들고(build) push
       - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v2
@@ -46,6 +47,8 @@ jobs:
           tags: ${{ env.DOCKER_IMAGE }}:latest
   # 배포 Job
   deploy:
+  # Deploy는 GHCR에 로그인 후 저장되어 있는 Docker image를 이용해 컨테이너를 실행시키는 역할
+  # runs-on 중 self-hosted는 필수로 써야한다.(이 값을 설정해야 서버에 등록한 runner가 실행된다.) / 이 부분에서 어느 Runner(EC2)로 실행할지 지정해줘야 한다.
     needs: build  # build 후에 실행되도록 정의
     name: Deploy
     runs-on: [ self-hosted, label-go ] # AWS ./configure에서 사용할 label명
@@ -55,8 +58,9 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN }}
       # 3000 -> 80 포트로 수행하도록 지정
+      # 실행 중인 도커 컨테이너를 중지하고 이전 버전인 컨테이너와 이미지를 삭제 후 새로운 이미지로 컨테이너를 run
       - name: Docker run
         run: |
           docker stop ${{ env.NAME }} && docker rm ${{ env.NAME }} && docker rmi ${{ env.DOCKER_IMAGE }}:latest
