@@ -1,4 +1,5 @@
 // 202034222 박성현 2주차 과제
+// 깃허브액션 ec2 자동 배포 test
 const express = require('express');
 const app = express();
 
